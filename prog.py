@@ -1,7 +1,7 @@
 import numpy as np
 from random import uniform, randint
 from enum import Enum
-from intertools import count
+from itertools import count
 
 class Status(Enum):
     Available = 1
@@ -68,7 +68,7 @@ class Client:
     def get_drink_time(self):
         return self.drink_time
 
-    def set_drink_time(self)
+    def set_drink_time(self):
         self.drink_time = get_time_drink()
 
     def to_string(self):
