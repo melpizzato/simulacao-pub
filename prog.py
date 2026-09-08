@@ -108,11 +108,11 @@ def print_state():
     print("-"*25)
     print(f"Clock: {clock}")
     print(f"Waitresses:")
-    print(f"\t{list_waitresses[0].to_string}")
-    print(f"\t{list_waitresses[1].to_string}")
+    print(f"\t{list_waitresses[0].to_string()}")
+    print(f"\t{list_waitresses[1].to_string()}")
     print(f"Clients:")
     for client in list_clients:
-        print(f"\t{client.to_string}")
+        print(f"\t{client.to_string()}")
     print("-"*25)
 
 if __name__ == "__main__":
