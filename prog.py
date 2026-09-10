@@ -9,9 +9,10 @@ smallest_time_pass = -1
 list_clients = []
 list_waitresses = []
 list_arrivals = []
-list_events = []
+timeline = []
 list_drinking = []
 list_waiting = []
+list_tasks = []
 
 class WaitressStatus(Enum):
     Available = 1
@@ -115,8 +116,21 @@ class Waitress:
         else:
             return f"{self.name}: {self.state}"
 
+def find_client_by_name(name):
+    for client in list_clients:
+        if client.name == name:
+            return client
+
+def find_task_unassigned():
+    for task in list_tasks:
+        if task["waitress"] is None:
+            return task
+
+def sort
+
 def fill_arrival_list():
     global list_arrivals
+
     count_clock = 0
     while (True):
         time_arrival = get_time_arrive()
@@ -126,54 +140,70 @@ def fill_arrival_list():
         list_arrivals.append({"client": Client(count_clock),
                               "time_arrival": time_arrival})
 
-def add_drink_event(client):
-    global list_events
-    time_event = get_time_drink()
-    list_events.append({"event": EventStatus.Drinking,
-                        "client": client,
-                        "clock": clock,
-                        "time": time_event})
-    list_events.sort(key=lambda x :x["time"])
+def add_drink_event(client_name, time_event):
+    global timeline
 
-def add_filling_event(client):
-    global list_events
-    time_event = get_time_fill()
-    list_events.append({"event": EventStatus.Filling,
-                        "client": client,
-                        "clock": clock,
-                        "time": time_event})
-    list_events.sort(key=lambda x :x["time"])
+    timeline.append({"event": EventStatus.Drinking,
+                     "client": client_name,
+                     "clock": clock,
+                     "time": time_event})
 
+def add_filling_event(client_name, waitress_name, time_event):
+    global timeline
 
-def add_cleaning_event():
-    global list_events
-    time_event = 5
-    list_events.append({"event": EventStatus.Cleaning,
-                        "clock": clock,
-                        "time": time_event})
-    list_events.sort(key=lambda x :x["time"])
+    timeline.append({"event": EventStatus.Filling,
+                     "client": client_name,
+                     "clock": clock,
+                     "waitress": waitress_name,
+                     "time": time_event})
+
+def add_cleaning_event(waitress_name):
+    global timeline
+
+    timeline.append({"event": EventStatus.Cleaning,
+                     "clock": clock,
+                     "waitress": waitress_name,
+                     "time": 5})
+
+def add_filling_task(client_name):
+    global list_tasks
+
+    list_tasks.append({"event": EventStatus.Filling,
+                       "client": client_name,
+                       "time": get_time_fill(),
+                       "waitress": None})
+    #add list_tasks.sort(key=func)
+
+def add_cleaning_task():
+    global list_tasks
+    
+    list_tasks.append({"event": EventStatus.Cleaning,
+                       "time": 5,
+                       "waitress": None})
+
+    #add list_tasks.sort(key=func)
 
 def resolve_arrive_event(event):
     global list_clients
-    global list_events
     global list_arrivals
+    global list_waiting
 
     client = event["client"]
     client.status = ClientStatus.Waiting
     client.queue_enter_time = clock
-
+    
     list_clients.append(client)
+    list_waiting.append(client)
     list_arrivals.remove(event)
-    add_drink_event(client)
+    add_filling_task(client)
 
-def resolve_drink_event(event):
-    global list_events
+def resolve_drink_event(client):
     global list_drinking
     global list_waiting
 
-    client = event["client"]
     list_drinking.remove(client)
-    list_events.remove(event)
+    add_drink_event(client.name, client.drink_time)
+    add_cleaning_task()
 
     if client.set_drinks() == -1:
         client.exit_time = clock
@@ -182,35 +212,70 @@ def resolve_drink_event(event):
         list_waiting.append(client)
         client.enter_queue_time = clock
         client.status = ClientStatus.Waiting
-        add_filling_event(client)
+        add_filling_task(client.name)
 
-def resolve_filling_event(event, waitress):
-    global list_events
+def resolve_filling_task(task, waitress):
     global list_waiting
     global list_drinking
     global num_glasses
+    global list_tasks
 
     num_glasses -= 1
 
-    client = event["client"]
+    client = find_client_by_name(task["client"])
+    if client is None:
+        return
     list_waiting.remove(client)
     list_drinking.append(client)
+    add_filling_event(client.name, waitress.name, task["time"])
+
     client.status = ClientStatus.Drinking
     client.total_wait_time += clock - client.queue_enter_time
     client.drink_time = get_time_drink()
 
     waitress.time_filling += waitress.occupation_time
-    task_list = [x for x in list_events if x["event"] == EventStatus.Filling or x["event"] == EventStatus.Cleaning]
-    if task_list:
-        if num_glasses < limit_glasses:
+    if list_tasks:
+        new_task = find_task_unassigned()
+        if new_task is None:
+            waitress.status = WaitressStatus.Available
+            waitress.occupation_time = 0
+        elif new_task["event"] == EventStatus.Filling:
+            new_task["waitress"] = waitress.name
+            waitress.status = WaitressStatus.Filling
+            waitress.occupation_time = new_task["time"]
+        elif new_task["event"] == EventStatus.Cleaning:
+            new_task[waitress] = waitress.name
             waitress.status = WaitressStatus.Cleaning
-            waitress.occupation_time = 5
+            waitress.occupation_time = new_task["time"]
+    else:
+        waitress.status = WaitressStatus.Available
+        waitress.occupation_time = 0
 
 
-    
-    
-    
+def resolve_cleaning_task(waitress):
+    global num_glasses
+    global list_tasks
 
+    num_glasses += 1
+    add_cleaning_event(waitress.name)
+
+    if list_tasks:
+        new_task = find_task_unassigned()
+        if new_task is None:
+            waitress.status = WaitressStatus.Available
+            waitress.occupation_time = 0
+        elif new_task["event"] == EventStatus.Filling:
+            new_task["waitress"] = waitress.name
+            waitress.status = WaitressStatus.Filling
+            waitress.occupation_time = new_task["time"]
+        elif new_task["event"] == EventStatus.Cleaning:
+            new_task[waitress] = waitress.name
+            waitress.status = WaitressStatus.Cleaning
+            waitress.occupation_time = new_task["time"]
+    else:
+        waitress.status = WaitressStatus.Available
+        waitress.occupation_time = 0
+    
 def print_state():
     print("-"*25)
     print(f"Clock: {clock}")
@@ -229,10 +294,6 @@ if __name__ == "__main__":
     
 
     while (True):
-        if clock > 30 and not list_events:
+        if clock > 30 and not list_tasks:
             break
-
-
-
-            
 
