@@ -174,11 +174,16 @@ def find_next_assigned_task():
     elif list_tasks[1]["time"] < list_tasks[0]["time"]:
         return list_tasks[1]
 
+def find_waitress_by_name(waitress_name):
+    for waitress in list_waitresses:
+        if waitress_name == waitress.name:
+            return waitress
+
 def update_waitress_task(waitress, time):
-    if waitress.status == WaitressStatus.Filling:
+    if waitress.state == WaitressStatus.Filling:
         waitress.occupation_time -= time
         waitress.time_filling += time
-    elif waitress.status == WaitressStatus.Cleaning:
+    elif waitress.state == WaitressStatus.Cleaning:
         waitress.occupation_time -= time
         waitress.time_cleaning += time
 
@@ -287,15 +292,15 @@ def assign_task(waitress):
     print(new_task)
 
     if new_task is None:
-        waitress.status = WaitressStatus.Available
+        waitress.state = WaitressStatus.Available
         waitress.occupation_time = 0
     elif new_task["event"] == EventStatus.Filling:
         new_task["waitress"] = waitress.name
-        waitress.status = WaitressStatus.Filling
+        waitress.state = WaitressStatus.Filling
         waitress.occupation_time = new_task["time"]
     elif new_task["event"] == EventStatus.Cleaning:
-        new_task[waitress] = waitress.name
-        waitress.status = WaitressStatus.Cleaning
+        new_task["waitress"] = waitress.name
+        waitress.state = WaitressStatus.Cleaning
         waitress.occupation_time = new_task["time"]
 
 
@@ -317,7 +322,7 @@ def resolve_arrive_event(event):
     list_clients.append(client)
     list_waiting.append(client)
     list_arrivals.remove(event)
-    add_filling_task(client)
+    add_filling_task(client.name)
     add_arrival_event(client.name, event["time_arrival"])
 
 """Resolve o término da bebida de um cliente.
@@ -414,7 +419,7 @@ def get_next_event():
 """
 def time_pass(time):
     for waitress in list_waitresses:
-        if waitress.status != WaitressStatus.Available:
+        if waitress.state != WaitressStatus.Available:
             update_waitress_task(waitress, time)
     if list_drinking:
         for client in list_drinking:
@@ -442,9 +447,8 @@ if __name__ == "__main__":
     list_waitresses.append(Waitress())
     print_state()
     fill_arrival_list()
-    count = 0
 
-    while (count < 10):
+    while (True):
         if clock > 30 and not list_clients:
             break
         for task in list_tasks:
@@ -457,9 +461,9 @@ if __name__ == "__main__":
         if event_type == EventStatus.Arriving:
             resolve_arrive_event(event)
         elif event_type == EventStatus.Filling:
-            resolve_filling_task(event, event["waitress"])
+            resolve_filling_task(event, find_waitress_by_name(event["waitress"]))
         elif event_type == EventStatus.Cleaning:
-            resolve_cleaning_task(event, event["waitress"])
+            resolve_cleaning_task(event, find_waitress_by_name(event["waitress"]))
         else:
             resolve_drink_event(event["client"])
 
@@ -470,7 +474,6 @@ if __name__ == "__main__":
 
         time_pass(time_passed)
         print_state()
-        count += 1
 
 
 
