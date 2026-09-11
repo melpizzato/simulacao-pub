@@ -1,11 +1,11 @@
 from random import uniform, randint
 from enum import Enum
 from itertools import count
+from typing import Dict
 
-clock = 0
-num_glasses = 50
-limit_glasses = 20
-smallest_time_pass = -1
+clock: float = 0.0
+num_glasses: int = 50
+limit_glasses: int = 20
 list_clients = []
 list_waitresses = []
 list_arrivals = []
@@ -73,7 +73,7 @@ def drinks():
     return randint(1,4)
 
 """
-    Classe para representar um cliente. Possui os atributos:
+Classe para representar um cliente. Possui os atributos:
     id: id inteiro sequencial
     name: nome do cliente (apenas a letra C seguida pelo id do cliente, ex C001)
     drinks: quantidade de drinks que um cliente irá pedir ainda
@@ -105,6 +105,7 @@ class Client:
             self.drinks -= 1
         else:
             if randint(0, 1) == 0:
+                self.exit_time = clock
                 return -1
             else:
                 self.drinks = drinks()
@@ -119,6 +120,8 @@ class Client:
             return f"{self.name}: {self.drinks} - {self.status} - drink time: {self.drink_time}"
         elif self.status == ClientStatus.Exited:
             return f"{self.name}: {self.status} in {self.exit_time}"
+        else:
+            return f"{self.name}: {self.time_arrive}"
 
 """
 Classe para representar a garçonete no sistema. Possui os seguintes atributos:
@@ -145,7 +148,7 @@ class Waitress:
     def to_string(self):
         if self.state == WaitressStatus.Cleaning or self.state == WaitressStatus.Filling:
             return f"{self.name}: {self.state} - occupation_time = {self.occupation_time}"
-        else:
+        elif self.state == WaitressStatus.Available:
             return f"{self.name}: {self.state}"
 
 """Função para retornar um cliente na lista de clientes pesquisando pelo nome"""
@@ -156,10 +159,33 @@ def find_client_by_name(name):
 
 """Função para retornar uma task não atribuída na lista de tarefas"""
 def find_task_unassigned():
+    if not list_tasks:
+        return
     for task in list_tasks:
         if task["waitress"] is None:
             return task
+"""Retorna a próxima task a ser concluída pelas garçonetes
+"""
+def find_next_assigned_task():
+    if not list_tasks:
+        return
+    if len(list_tasks) < 2 or list_tasks[0]["time"] <= list_tasks[1]["time"]:
+        return list_tasks[0]
+    elif list_tasks[1]["time"] < list_tasks[0]["time"]:
+        return list_tasks[1]
 
+def update_waitress_task(waitress, time):
+    if waitress.status == WaitressStatus.Filling:
+        waitress.occupation_time -= time
+        waitress.time_filling += time
+    elif waitress.status == WaitressStatus.Cleaning:
+        waitress.occupation_time -= time
+        waitress.time_cleaning += time
+
+    for task in list_tasks:
+        if task["waitress"] is not None and task["waitress"] == waitress.name:
+            task["time"] -= time        
+    
 """Função para organizar a lista de tarefas. A lista de tarefas deve ser organizada da seguinte forma:
     Se glasses > limit_glasses, then:
         1. Tarefas atribuídas às garçonetes
@@ -170,8 +196,19 @@ def find_task_unassigned():
         2. Lista de tarefas de limpeza
         3. Fila dos clientes para encher copos
 """
-def sort_task_list():
-    pass
+def sort_task_list(task):
+    if task["waitress"] is not None:
+        return 0
+    if num_glasses >= limit_glasses:
+        if task["event"] == EventStatus.Cleaning:
+            return task["time"] * 10
+        else:
+            return task["time"]
+    else:
+        if task["event"] == EventStatus.Filling:
+            return task["time"] * 10
+        else:
+            return task["time"]
 
 """Função para inicializar a fila de chegada dos clientes, com a criação do objeto cliente e o tempo de chegada"""
 def fill_arrival_list():
@@ -180,7 +217,7 @@ def fill_arrival_list():
     count_clock = 0
     while (True):
         time_arrival = get_time_arrive()
-        if count_clock + time_arrival < 30:
+        if count_clock + time_arrival > 30:
             break
         count_clock += time_arrival
         list_arrivals.append({"client": Client(count_clock),
@@ -194,7 +231,6 @@ def add_arrival_event(client_name, time_event):
                      "client": client_name,
                      "clock": clock,
                      "time": time_event})
-
 
 """Função para cadastrar a conclusão do evento de bebida na timeline"""
 def add_drink_event(client_name, time_event):
@@ -233,7 +269,7 @@ def add_filling_task(client_name):
                        "client": client_name,
                        "time": get_time_fill(),
                        "waitress": None})
-    #add list_tasks.sort(key=func)
+    list_tasks.sort(key=sort_task_list)
 """Função para adicionar a tarefa de limpar copo à fila de tarefas das garçonetes
 OBS: Ainda falta adicionar a função de sort ao final desta função para a organização correta da fila
 """
@@ -244,7 +280,24 @@ def add_cleaning_task():
                        "time": 5,
                        "waitress": None})
 
-    #add list_tasks.sort(key=func)
+    list_tasks.sort(key=sort_task_list)
+
+def assign_task(waitress):
+    new_task = find_task_unassigned()
+    print(new_task)
+
+    if new_task is None:
+        waitress.status = WaitressStatus.Available
+        waitress.occupation_time = 0
+    elif new_task["event"] == EventStatus.Filling:
+        new_task["waitress"] = waitress.name
+        waitress.status = WaitressStatus.Filling
+        waitress.occupation_time = new_task["time"]
+    elif new_task["event"] == EventStatus.Cleaning:
+        new_task[waitress] = waitress.name
+        waitress.status = WaitressStatus.Cleaning
+        waitress.occupation_time = new_task["time"]
+
 
 """Função que resolve o evento de chegada de um cliente.
     1. Atera o estado do cliente
@@ -294,7 +347,6 @@ def resolve_drink_event(client):
     1. decrementa o número de copos disponíveis
     2. modifica o estado do cliente e altera as respectivas filas
     3. registra o término do evento na timeline
-    4. se houver outras tarefas na fila, atribui a garçonete a estas tarefas. Senão altera seu estado para Available
 """
 def resolve_filling_task(task, waitress):
     global list_waiting
@@ -309,53 +361,70 @@ def resolve_filling_task(task, waitress):
         return
     list_waiting.remove(client)
     list_drinking.append(client)
-    add_filling_event(client.name, waitress.name, task["time"])
 
     client.status = ClientStatus.Drinking
     client.total_wait_time += clock - client.queue_enter_time
     client.drink_time = get_time_drink()
+    list_drinking.sort(key=lambda x: x.drink_time)
 
     waitress.time_filling += waitress.occupation_time
-    new_task = find_task_unassigned()
-    if new_task is None:
-        waitress.status = WaitressStatus.Available
-        waitress.occupation_time = 0
-    elif new_task["event"] == EventStatus.Filling:
-        new_task["waitress"] = waitress.name
-        waitress.status = WaitressStatus.Filling
-        waitress.occupation_time = new_task["time"]
-    elif new_task["event"] == EventStatus.Cleaning:
-        new_task[waitress] = waitress.name
-        waitress.status = WaitressStatus.Cleaning
-        waitress.occupation_time = new_task["time"]
+    waitress.state = WaitressStatus.Available
+    list_tasks.remove(task)
+
+    add_filling_event(client.name, waitress.name, task["time"])
+
 
 """Resolve a tarefa de limpeza de copos
     1. incrementa o número de copos no sistema
     2. se houver tarefas na lista, atribui a garçonete a tarefa. Senão altera seu estado para Available 
 """
-def resolve_cleaning_task(waitress):
+def resolve_cleaning_task(task, waitress):
     global num_glasses
     global list_tasks
 
     num_glasses += 1
     add_cleaning_event(waitress.name)
+    waitress.state = WaitressStatus.Available
+    list_tasks.remove(task)
 
-    new_task = find_task_unassigned()
-    if new_task is None:
-        waitress.status = WaitressStatus.Available
-        waitress.occupation_time = 0
-    elif new_task["event"] == EventStatus.Filling:
-        new_task["waitress"] = waitress.name
-        waitress.status = WaitressStatus.Filling
-        waitress.occupation_time = new_task["time"]
-    elif new_task["event"] == EventStatus.Cleaning:
-        new_task[waitress] = waitress.name
-        waitress.status = WaitressStatus.Cleaning
-        waitress.occupation_time = new_task["time"]
+"""Verifica as listas de chegada, tarefas e bebidas para verificar qual o próximo evento a ser resolvido 
+"""
+def get_next_event():
+    next_time = float('inf')
+    event = dict()
+    event_type = None 
+    if list_arrivals:
+        next_time = list_arrivals[0]["time_arrival"] - clock
+        event = list_arrivals[0]
+        event_type = EventStatus.Arriving
+
+    if (temp := find_next_assigned_task()) is not None and next_time > temp["time"]:
+        event = temp
+        next_time = event["time"]
+        event_type = event["event"]
+
+    if list_drinking and next_time > list_drinking[0].drink_time:
+        next_time = list_drinking[0].drink_time
+        event = dict(client=list_drinking[0])
+        event_type = EventStatus.Drinking
+
+    return (event_type, next_time, event)
+
+"""Avança o tempo nas listas de tarefas e drinking
+"""
+def time_pass(time):
+    for waitress in list_waitresses:
+        if waitress.status != WaitressStatus.Available:
+            update_waitress_task(waitress, time)
+    if list_drinking:
+        for client in list_drinking:
+            client.drink_time -= time 
     
 """Printa o estado do sitema. Tempo do relógio e estado dos clientes e garçonetes do sistema
 """
 def print_state():
+    global list_clients
+
     print("-"*25)
     print(f"Clock: {clock}")
     print(f"Waitresses:")
@@ -364,15 +433,44 @@ def print_state():
     print(f"Clients:")
     for client in list_clients:
         print(f"\t{client.to_string()}")
+        if client.status == ClientStatus.Exited:
+            list_clients.remove(client)
     print("-"*25)
 
 if __name__ == "__main__":
     list_waitresses.append(Waitress())
     list_waitresses.append(Waitress())
     print_state()
-    
+    fill_arrival_list()
+    count = 0
 
-    while (True):
-        if clock > 30 and not list_tasks:
+    while (count < 10):
+        if clock > 30 and not list_clients:
             break
+        for task in list_tasks:
+            print(task)
+
+        event_type, time_passed, event = get_next_event()
+
+        clock += time_passed
+
+        if event_type == EventStatus.Arriving:
+            resolve_arrive_event(event)
+        elif event_type == EventStatus.Filling:
+            resolve_filling_task(event, event["waitress"])
+        elif event_type == EventStatus.Cleaning:
+            resolve_cleaning_task(event, event["waitress"])
+        else:
+            resolve_drink_event(event["client"])
+
+        for waitress in list_waitresses:
+            if waitress.state == WaitressStatus.Available:
+                assign_task(waitress)
+                continue
+
+        time_pass(time_passed)
+        print_state()
+        count += 1
+
+
 
