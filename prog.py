@@ -344,7 +344,7 @@ def resolve_drink_event(client):
         client.status = ClientStatus.Exited
     else:
         list_waiting.append(client)
-        client.enter_queue_time = clock
+        client.queue_enter_time = clock
         client.status = ClientStatus.Waiting
         add_filling_task(client.name)
 
@@ -430,7 +430,7 @@ def time_pass(time):
 def print_state():
     global list_clients
 
-    print("-"*25)
+    print("-"*60)
     print(f"Clock: {clock}")
     print(f"Waitresses:")
     print(f"\t{list_waitresses[0].to_string()}")
@@ -440,7 +440,7 @@ def print_state():
         print(f"\t{client.to_string()}")
         if client.status == ClientStatus.Exited:
             list_clients.remove(client)
-    print("-"*25)
+    print("-"*60)
 
 if __name__ == "__main__":
     list_waitresses.append(Waitress())
