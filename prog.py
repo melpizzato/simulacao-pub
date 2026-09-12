@@ -1,7 +1,7 @@
 from random import uniform, randint
 from enum import Enum
 from itertools import count
-from typing import Dict
+
 
 clock: float = 0.0
 num_glasses: int = 50
@@ -91,6 +91,7 @@ class Client:
         self.name = f"C{self.id:>03}"
         self.drinks = drinks()
         self.drink_time = 0
+        self.static_drink_time = 0
         self.time_arrive = time_arrive
         self.queue_enter_time = 0
         self.total_wait_time = 0
@@ -180,16 +181,17 @@ def find_waitress_by_name(waitress_name):
             return waitress
 
 def update_waitress_task(waitress, time):
-    if waitress.state == WaitressStatus.Filling:
+    """if waitress.state == WaitressStatus.Filling:
         waitress.occupation_time -= time
         waitress.time_filling += time
     elif waitress.state == WaitressStatus.Cleaning:
         waitress.occupation_time -= time
-        waitress.time_cleaning += time
+        waitress.time_cleaning += time """
 
     for task in list_tasks:
         if task["waitress"] is not None and task["waitress"] == waitress.name:
-            task["time"] -= time        
+            task["time"] -= time
+            break
     
 """Função para organizar a lista de tarefas. A lista de tarefas deve ser organizada da seguinte forma:
     Se glasses > limit_glasses, then:
@@ -221,12 +223,13 @@ def fill_arrival_list():
 
     count_clock = 0
     while (True):
-        time_arrival = get_time_arrive()
-        if count_clock + time_arrival > 30:
+        interval_arrival = get_time_arrive()
+        if count_clock + interval_arrival > 30:
             break
-        count_clock += time_arrival
+        count_clock += interval_arrival
         list_arrivals.append({"client": Client(count_clock),
-                              "time_arrival": time_arrival})
+                              "interval_arrival": interval_arrival,
+                              "time_arrival": count_clock})
 
 """Função para cadastrar a conclusão do evento de chegada na timeline"""
 def add_arrival_event(client_name, time_event):
@@ -289,7 +292,6 @@ def add_cleaning_task():
 
 def assign_task(waitress):
     new_task = find_task_unassigned()
-    print(new_task)
 
     if new_task is None:
         waitress.state = WaitressStatus.Available
@@ -323,7 +325,7 @@ def resolve_arrive_event(event):
     list_waiting.append(client)
     list_arrivals.remove(event)
     add_filling_task(client.name)
-    add_arrival_event(client.name, event["time_arrival"])
+    add_arrival_event(client.name, event["interval_arrival"])
 
 """Resolve o término da bebida de um cliente.
     1. Registra o evento na timeline
@@ -336,7 +338,7 @@ def resolve_drink_event(client):
     global list_waiting
 
     list_drinking.remove(client)
-    add_drink_event(client.name, client.drink_time)
+    add_drink_event(client.name, client.static_drink_time)
     add_cleaning_task()
 
     if client.set_drinks() == -1:
@@ -370,14 +372,15 @@ def resolve_filling_task(task, waitress):
     client.status = ClientStatus.Drinking
     client.total_wait_time += clock - client.queue_enter_time
     client.drink_time = get_time_drink()
+    client.static_drink_time = client.drink_time
     list_drinking.sort(key=lambda x: x.drink_time)
 
+    add_filling_event(client.name, waitress.name, waitress.occupation_time)
+
     waitress.time_filling += waitress.occupation_time
+    waitress.occupation_time = 0
     waitress.state = WaitressStatus.Available
     list_tasks.remove(task)
-
-    add_filling_event(client.name, waitress.name, task["time"])
-
 
 """Resolve a tarefa de limpeza de copos
     1. incrementa o número de copos no sistema
@@ -389,7 +392,10 @@ def resolve_cleaning_task(task, waitress):
 
     num_glasses += 1
     add_cleaning_event(waitress.name)
+    waitress.time_cleaning += waitress.occupation_time
+    waitress.occupation_time = 0
     waitress.state = WaitressStatus.Available
+    
     list_tasks.remove(task)
 
 """Verifica as listas de chegada, tarefas e bebidas para verificar qual o próximo evento a ser resolvido 
@@ -423,7 +429,7 @@ def time_pass(time):
             update_waitress_task(waitress, time)
     if list_drinking:
         for client in list_drinking:
-            client.drink_time -= time 
+            client.drink_time -= time
     
 """Printa o estado do sitema. Tempo do relógio e estado dos clientes e garçonetes do sistema
 """
@@ -432,6 +438,7 @@ def print_state():
 
     print("-"*60)
     print(f"Clock: {clock}")
+    print(f"Glasses: {num_glasses}")
     print(f"Waitresses:")
     print(f"\t{list_waitresses[0].to_string()}")
     print(f"\t{list_waitresses[1].to_string()}")
@@ -451,12 +458,17 @@ if __name__ == "__main__":
     while (True):
         if clock > 30 and not list_clients:
             break
-        for task in list_tasks:
-            print(task)
+
+        print("-"*20+"list_arrivals"+"-"*20)
+        
+        for arrival in list_arrivals:
+            print(arrival)
 
         event_type, time_passed, event = get_next_event()
 
         clock += time_passed
+        time_pass(time_passed)
+
 
         if event_type == EventStatus.Arriving:
             resolve_arrive_event(event)
@@ -472,8 +484,9 @@ if __name__ == "__main__":
                 assign_task(waitress)
                 continue
 
-        time_pass(time_passed)
         print_state()
-
+    print("timeline:")
+    for event in timeline:
+        print(event)
 
 
