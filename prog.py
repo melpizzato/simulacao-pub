@@ -144,6 +144,7 @@ class Waitress:
         self.name = f"W{self.id:>03}"
         self.state = WaitressStatus.Available
         self.occupation_time = 0
+        self.static_occupation_time = 0
         self.time_cleaning = 0
         self.time_filling = 0
 
@@ -179,17 +180,20 @@ def find_next_assigned_task():
     elif list_tasks[1]["time"] < list_tasks[0]["time"]:
         return list_tasks[1]
 
+"""Retorna o objeto garçonete por nome
+"""
 def find_waitress_by_name(waitress_name):
     for waitress in list_waitresses:
         if waitress_name == waitress.name:
             return waitress
-
+"""Atualiza o tempo das tarefas e tempo de ocupação da garçonete"""
 def update_waitress_task(waitress, time):
     for task in list_tasks:
         if task["waitress"] is not None and task["waitress"] == waitress.name:
             task["time"] -= time
             break
-    
+
+    waitress.occupation_time -= time
 """Função para organizar a lista de tarefas. A lista de tarefas deve ser organizada da seguinte forma:
     Se glasses > limit_glasses, then:
         1. Tarefas atribuídas às garçonetes
@@ -265,8 +269,7 @@ def add_cleaning_event(waitress_name):
                      "waitress": waitress_name,
                      "time": 5})
 
-"""Função para adicionar a tarefa de encher copo à fila de tarefas das garçonetes
-OBS: Ainda falta adicionar a função de sort ao final desta função para a organização correta da fila"""
+"""Função para adicionar a tarefa de encher copo à fila de tarefas das garçonetes"""
 def add_filling_task(client_name):
     global list_tasks
 
@@ -274,10 +277,8 @@ def add_filling_task(client_name):
                        "client": client_name,
                        "time": get_time_fill(),
                        "waitress": None})
-    list_tasks.sort(key=sort_task_list)
-"""Função para adicionar a tarefa de limpar copo à fila de tarefas das garçonetes
-OBS: Ainda falta adicionar a função de sort ao final desta função para a organização correta da fila
-"""
+
+"""Função para adicionar a tarefa de limpar copo à fila de tarefas das garçonetes"""
 def add_cleaning_task():
     global list_tasks
     
@@ -285,23 +286,28 @@ def add_cleaning_task():
                        "time": 5,
                        "waitress": None})
 
+"""Função para atribuir uma tarefa a uma garçonete livre"""
+def assign_task(waitress):
+    global list_tasks
+
     list_tasks.sort(key=sort_task_list)
 
-def assign_task(waitress):
     new_task = find_task_unassigned()
 
     if new_task is None:
         waitress.state = WaitressStatus.Available
         waitress.occupation_time = 0
+        waitress.static_occupation_time = 0
     elif new_task["event"] == EventStatus.Filling:
         new_task["waitress"] = waitress.name
         waitress.state = WaitressStatus.Filling
         waitress.occupation_time = new_task["time"]
+        waitress.static_occupation_time = new_task["time"]
     elif new_task["event"] == EventStatus.Cleaning:
         new_task["waitress"] = waitress.name
         waitress.state = WaitressStatus.Cleaning
         waitress.occupation_time = new_task["time"]
-
+        waitress.static_occupation_time = new_task["time"]
 
 """Função que resolve o evento de chegada de um cliente.
     1. Atera o estado do cliente
@@ -373,9 +379,10 @@ def resolve_filling_task(task, waitress):
     client.static_drink_time = client.drink_time
     list_drinking.sort(key=lambda x: x.drink_time)
 
-    add_filling_event(client.name, waitress.name, waitress.occupation_time)
+    add_filling_event(client.name, waitress.name, waitress.static_occupation_time)
 
-    waitress.time_filling += waitress.occupation_time
+    waitress.time_filling += waitress.static_occupation_time
+    waitress.static_occupation_time = 0
     waitress.occupation_time = 0
     waitress.state = WaitressStatus.Available
     list_tasks.remove(task)
@@ -390,7 +397,8 @@ def resolve_cleaning_task(task, waitress):
 
     num_glasses += 1
     add_cleaning_event(waitress.name)
-    waitress.time_cleaning += waitress.occupation_time
+    waitress.time_cleaning += waitress.static_occupation_time
+    waitress.static_occupation_time = 0
     waitress.occupation_time = 0
     waitress.state = WaitressStatus.Available
     
@@ -447,6 +455,8 @@ def print_state():
             list_clients.remove(client)
     print("-"*60)
 
+"""Exporta os resultados das garçonetes em .csv
+"""
 def export_waitress_csv(folder_path):
     file_path = folder_path / "waitress.csv"
 
@@ -466,6 +476,8 @@ def export_waitress_csv(folder_path):
                              "total_busy_time": waitress.time_filling + waitress.time_cleaning,
                              })
 
+"""Exporta os resultados dos clientes em .csv
+"""
 def export_client_csv(folder_path):
     file_path = folder_path / "client.csv"
 
@@ -487,6 +499,8 @@ def export_client_csv(folder_path):
                              "total_drinks_taken": client.total_drinks_taken,
                              })
 
+"""Exporta os resultados da timeline em .csv
+"""
 def export_timeline_csv(folder_path):
     file_path = folder_path / "timeline.csv"
 

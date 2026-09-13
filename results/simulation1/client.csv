@@ -1,0 +1,5 @@
+client,arrival_time,exit_time,total_wait_time,total_drinks_taken
+C001,12.5,63.5,24.0,2
+C002,20.0,74.0,29.0,3
+C003,27.5,76.0,26.5,3
+C004,30.0,112.5,45.5,4
