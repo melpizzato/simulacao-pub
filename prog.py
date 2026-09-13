@@ -1,12 +1,14 @@
 from random import uniform, randint
 from enum import Enum
 from itertools import count
-
+import csv
+from pathlib import Path
 
 clock: float = 0.0
 num_glasses: int = 50
 limit_glasses: int = 20
 list_clients = []
+list_all_clients = []
 list_waitresses = []
 list_arrivals = []
 timeline = []
@@ -97,6 +99,7 @@ class Client:
         self.total_wait_time = 0
         self.exit_time = -1
         self.status: ClientStatus | None = None
+        self.total_drinks_taken = 0
 
     """
     função para decrementar os drinks do cliente ao beber e randomizar sua saída de fato do sistema
@@ -104,6 +107,7 @@ class Client:
     def set_drinks(self):
         if self.drinks > 0:
             self.drinks -= 1
+            self.total_drinks_taken += 1
         else:
             if randint(0, 1) == 0:
                 self.exit_time = clock
@@ -181,13 +185,6 @@ def find_waitress_by_name(waitress_name):
             return waitress
 
 def update_waitress_task(waitress, time):
-    """if waitress.state == WaitressStatus.Filling:
-        waitress.occupation_time -= time
-        waitress.time_filling += time
-    elif waitress.state == WaitressStatus.Cleaning:
-        waitress.occupation_time -= time
-        waitress.time_cleaning += time """
-
     for task in list_tasks:
         if task["waitress"] is not None and task["waitress"] == waitress.name:
             task["time"] -= time
@@ -322,6 +319,7 @@ def resolve_arrive_event(event):
     client.queue_enter_time = clock
     
     list_clients.append(client)
+    list_all_clients.append(client)
     list_waiting.append(client)
     list_arrivals.remove(event)
     add_filling_task(client.name)
@@ -449,6 +447,70 @@ def print_state():
             list_clients.remove(client)
     print("-"*60)
 
+def export_waitress_csv(folder_path):
+    file_path = folder_path / "waitress.csv"
+
+    with file_path.open(mode="w", newline="", encoding="utf-8") as file:
+        fieldnames = ["waitress",
+                      "time_filling",
+                      "time_cleaning",
+                      "total_busy_time",
+                      ]
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for waitress in list_waitresses:
+            writer.writerow({"waitress": waitress.name,
+                             "time_filling": waitress.time_filling,
+                             "time_cleaning": waitress.time_cleaning,
+                             "total_busy_time": waitress.time_filling + waitress.time_cleaning,
+                             })
+
+def export_client_csv(folder_path):
+    file_path = folder_path / "client.csv"
+
+    with file_path.open(mode="w", newline="", encoding="utf-8") as file:
+        fieldnames = ["client",
+                      "arrival_time",
+                      "exit_time",
+                      "total_wait_time",
+                      "total_drinks_taken",
+                      ]
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for client in list_all_clients:
+            writer.writerow({"client": client.name,
+                             "arrival_time": client.time_arrive,
+                             "exit_time": client.exit_time,
+                             "total_wait_time": client.total_wait_time,
+                             "total_drinks_taken": client.total_drinks_taken,
+                             })
+
+def export_timeline_csv(folder_path):
+    file_path = folder_path / "timeline.csv"
+
+    with file_path.open(mode="w", newline="", encoding="utf-8") as file:
+        fieldnames = ["id",
+                      "clock",
+                      "event",
+                      "client",
+                      "waitress",
+                      "duration",
+                      ]
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for id, event in enumerate(timeline,start=1):
+            writer.writerow({"id": id,
+                             "clock": event.get("clock", ""),
+                             "event": event.get("event").name if event.get("event") else "",
+                             "client": event.get("client", ""),
+                             "waitress": event.get("waitress", ""),
+                             "duration": event.get("time", ""),
+                             })
+
+  
 if __name__ == "__main__":
     list_waitresses.append(Waitress())
     list_waitresses.append(Waitress())
@@ -458,11 +520,6 @@ if __name__ == "__main__":
     while (True):
         if clock > 30 and not list_clients:
             break
-
-        print("-"*20+"list_arrivals"+"-"*20)
-        
-        for arrival in list_arrivals:
-            print(arrival)
 
         event_type, time_passed, event = get_next_event()
 
@@ -485,8 +542,19 @@ if __name__ == "__main__":
                 continue
 
         print_state()
-    print("timeline:")
-    for event in timeline:
-        print(event)
+
+    folder_path = ""
+    count = 1
+    while True:
+        if (folder_path := Path(f"results/simulation{count}")).is_dir():
+            count += 1
+            continue
+        else:
+            folder_path.mkdir(parents=True, exist_ok=True)
+            break
+
+    export_client_csv(folder_path)
+    export_waitress_csv(folder_path)
+    export_timeline_csv(folder_path)
 
 
